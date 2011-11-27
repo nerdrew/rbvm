@@ -1,0 +1,120 @@
+---
+niceness: 0
+# Rubies
+interpreter: ruby
+ruby:
+    version: 1.9.2
+    configure_flags: --enable-shared,--disable-install-doc
+    repo_url: git://github.com/ruby/ruby.git
+    url: ftp://ftp.ruby-lang.org/pub/ruby/#{version[0..2]}
+    archive_name: ruby-#{version}-p#{patchlevel}.tar.bz2 
+    "1.9.3":
+        patchlevel: rc1
+        head:
+            rubygems_version: 1.8.5
+    "1.9.2":
+        patchlevel: 290
+    "1.9.1":
+        patchlevel: 431
+    "1.8.7":
+        patchlevel: 352
+    "1.8.6":
+        patchlevel: 420
+    "1.8.5":
+        patchlevel: 231
+
+rubygems:
+    url: http://production.cf.rubygems.org/rubygems
+    repo_url: git://github.com/rubygems/rubygems.git
+    version: 1.8.10
+
+rbx:
+    version: head
+    url: http://asset.rubini.us
+    repo_url: git://github.com/rubinius/rubinius.git
+    archive_name: rubinius-#{version}-#{patchlevel}.tar.gz
+    configure_flags: --skip-system
+    "1.0.0":
+        patchlevel: 20100514
+    "1.0.1":
+        patchlevel: 20100603
+    "1.1.0":
+        patchlevel: 20100923
+    "1.1.1":
+        patchlevel: 20101116
+    "1.2.0":
+        patchlevel: 20101221
+    "1.2.1":
+        patchlevel: 20110215
+    "1.2.2":
+        patchlevel: 20110222
+    "1.2.3":
+        patchlevel: 20110315
+    "1.2.4":
+        patchlevel: 20110705
+
+ree:
+    version: 1.8.7
+    configure_flags: --dont-install-useful-gems
+    archive_name: ruby-enterprise-#{version}-#{patchlevel}.tar.gz
+    "1.8.6":
+        patchlevel: 20090610
+        url: http://rubyforge.org/frs/download.php/58677
+        repo_url: git://github.com/FooBarWidget/rubyenterpriseedition.git
+    "1.8.7":
+        url: http://rvm.beginrescueend.com/src
+        repo_url: git://github.com/FooBarWidget/rubyenterpriseedition187-330
+        patchlevel: 2011.03
+
+kiji:
+    repo_url: git://github.com/twitter/rubyenterpriseedition187-248.git
+    version: head
+
+jruby:
+    version: 1.6.4
+    repo_url: git://github.com/jruby/jruby.git
+    url: http://jruby.org.s3.amazonaws.com/downloads/#{version}
+    archive_name: jruby-bin-#{version}.tar.gz
+
+macruby:
+    version: 0.10
+    url: http://www.macruby.org/files
+    repo_url: git://github.com/MacRuby/MacRuby.git
+    archive_name: "MacRuby #{version}.zip"
+    nightly:
+        version: 0.11
+        url: http://www.macruby.org/files/nightlies/macruby_nightly-latest.pkg
+
+maglev:
+    version: 26852
+    url: http://glass-downloads.gemstone.com/maglev
+    repo_url: git://github.com/MagLev/maglev.git
+    archive_name: MagLev-#{version}
+
+ironruby:
+    version: 1.0
+    repo_url: git://github.com/ironruby/ironruby.git
+    "1.0":
+        url: http://rubyforge.org/frs/download.php/70179
+
+# Packages
+package_urls:
+    readline: ftp://ftp.gnu.org/gnu/readline
+    libiconv: http://ftp.gnu.org/pub/gnu/libiconv
+    curl: http://curl.haxx.se/download
+    openssl: http://www.openssl.org/source
+    zlib: http://www.zlib.net
+    autoconf: ftp.gnu.org/gnu/autoconf
+    ncurses: http://ftp.gnu.org/pub/gnu/ncurses
+    pkg-config: http://pkgconfig.freedesktop.org/releases
+    gettext: ftp://ftp.gnu.org/pub/gnu/gettext
+    libxml2: ftp://xmlsoft.org/libxml2
+    libxslt: ftp://xmlsoft.org/libxslt
+    yaml: https://rvm.beginrescueend.com/src
+    glib: http://ftp.gnome.org/pub/gnome/sources/glib/2.23
+    mono: http://ftp.novell.com/pub/mono/sources/mono
+    llvm: https://llvm.org/svn/llvm-project/llvm/trunk
+
+
+
+# vim: sts=4:sw=4:ts=4    

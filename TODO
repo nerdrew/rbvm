@@ -1,0 +1,38 @@
+Add readline to irb install
+Look at curl / tar mocks.
+  Maybe with command aliases?
+  Curb gem? Still need curl installed, another dependency.
+Better mock tests for speed. Maybe break out the slow tests again.
+run: a series of methods returning true or false, false breaks? No.
+use env[:rvm_gems_path] everywhere; similar with other paths
+
+environments - are environment files necessary?
+  IRBRC
+  MAGLEV_HOME - unset
+  MY_RUBY_HOME
+  need way to unset variables
+wrappers
+
+Adjust rake shebangs?
+
+use Gem::Commands::* for gem stuff, much faster.
+
+put each method's requirement at the top of each
+  installed?
+  valid?
+  known?
+  etc?
+
+removing a ruby or gemset should check/change default
+
+Config file for install-time options: rvm_path, gemset_separator, etc.
+
+should gem, rake, ruby commands run against all rubies or all ruby gemsets?
+
+Look at FileUtils::DryRun
+
+Copy gems from one ruby to another / copy gemsets.
+
+on startup auto select default ruby if one exists.
+
+ensure no extra arguments are ignored

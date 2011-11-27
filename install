@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+
+set -o errtrace
+PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
+
+unset ${!rvm_*}
+
+#Handle Solaris Hosts
+if [[ "$(uname -sr)" == "SunOS 5.11" ]]
+then
+  PATH="/usr/gnu/bin:$PATH"
+fi
+
+#
+# RVM Installer
+#
+rbvm_source_path="$PWD/`dirname $0`"
+
+# Parse RVM Installer CLI arguments.
+while (( $# > 0 ))
+do
+  token="$1"
+  shift
+
+  case "$token" in
+    (--path)
+      rbvm_path="$1"
+      shift
+      ;;
+    (--version)
+      rbvm_path="${PWD%%+(\/)}"
+      echo "0.1"
+      unset rbvm_path
+      exit
+      ;;
+    (--debug)
+      rbvm_debug_flag=1
+      set -o verbose
+      ;;
+    (--help|-h)
+      cat "`dirname $0`/help/rbvm_install"
+      exit 0
+      ;;
+    --ruby) rbvm_ruby="$1" ; shift ;;
+    (*)
+      echo "Unrecognized option: $token"
+      cat "`dirname $0`/help/rbvm_install"
+      exit 1
+      ;;
+  esac
+done
+
+# Do with rbvm variable or --path or default, don't guess
+#determine_install_path
+if [[ -z $rbvm_path ]]; then
+  rbvm_path=$HOME/.rbvm
+fi
+
+#create_install_paths
+install_paths=(archives src lib log bin gems man rubies config
+user tmp gems environments wrappers)
+for install_path in "${install_paths[@]}"
+do
+  if [[ ! -d "$rbvm_path/$install_path" ]]
+  then
+    mkdir -p "$rbvm_path/$install_path"
+  fi
+done
+
+# Needs $rbvm_source_path set
+#install_rbvm_files
+files=(LICENCE VERSION)
+for file in "${files[@]}"
+do
+  cp -f "$rbvm_source_path/${file}" "$rbvm_path/${file}"
+done
+
+directories=(config contrib scripts examples help patches)
+
+for directory in ${directories[@]}
+do
+  for entry in $(find $directory 2>/dev/null)
+  do
+    if [[ -f "$rbvm_source_path/$entry" ]]
+    then
+      # Target is supposed to be a file, remove if it is a directory.
+      if [[ -d "$rbvm_path/$entry" ]]
+      then
+        rm -rf "$rbvm_path/$entry"
+      fi
+      cp -f "$rbvm_source_path/$entry" "$rbvm_path/$entry"
+    elif [[ -d "$rbvm_source_path/$entry" ]]
+    then
+      # Target is supposed to be a directory, remove if it is a file.
+      if [[ -f "$rbvm_path/$entry" ]]
+      then
+        rm -f "$rbvm_path/$entry"
+      fi
+      if [[ ! -d "$rbvm_path/$entry" ]]
+      then
+        mkdir -p "$rbvm_path/$entry"
+      fi
+    fi
+  done
+done
+
+#install_rbvm_files
+# ZABR rbvm stuff
+rbvm_ruby="${rbvm_ruby:-"builtin"}"
+if [[ "$rbvm_ruby" == "builtin" ]]; then
+  if [[ ! -e "$rbvm_path/internal_ruby/bin/ruby" ]]; then
+    # Install Internal Ruby
+    echo "Installing internal ruby (this might take a few minutes...)"
+    install_log=$( (
+    url=ftp://ftp.ruby-lang.org/pub/ruby/1.9
+    #version=1.9.3
+    #patchlevel=0
+    version=1.9.2
+    patchlevel=290
+    config_flags="--enable-shared --disable-install-doc"
+    if [[ ! -e "${rbvm_path}/archives/ruby-${version}-p${patchlevel}.tar.bz2" ]]; then
+      curl -L --create-dirs -C - -o "$rbvm_path/archives/ruby-${version}-p$patchlevel.tar.bz2" "${url}/ruby-${version}-p${patchlevel}.tar.bz2"
+    fi
+    if [[ ! -e "${rbvm_path}/src/ruby-${version}-p${patchlevel}" ]]; then
+      bunzip2 < "$rbvm_path/archives/ruby-${version}-p${patchlevel}.tar.bz2" | tar xf - -C "$rbvm_path"/src
+    elif [[ ! -d "${rbvm_path}/src/ruby-${version}-p${patchlevel}" ]]; then
+      printf "\nThere is a file in the way. Remove it: $rbvm_path/src/ruby-${version}-p$patchlevel\n"
+      exit 1
+    fi
+    tmp="${rbvm_path}/src/ruby-${version}-p${patchlevel}"
+    cd "$tmp" && ./configure --prefix=$rbvm_path/internal_ruby $config_flags && make ruby
+    # ruby 1.9.3 doesn't run from the src dir
+    cd "$tmp" && make install
+    cp -a bin/* "$rbvm_path/internal_ruby/bin"
+    unset RUBYOPT
+    ruby="$rbvm_path/internal_ruby/bin/ruby"
+    cd "$tmp/ext/digest" && $ruby extconf.rb && make && make install 
+    cd "$tmp/ext/digest/md5" && $ruby extconf.rb && make && make install
+    cd "$tmp/ext/readline" && $ruby extconf.rb && make && make install
+    cd "$tmp/ext/syck" && $ruby extconf.rb && make && make install
+    #cd "$tmp/ext/date" && $ruby extconf.rb && make && make install
+    cd "$tmp/ext/stringio" && $ruby extconf.rb && make && make install
+    # ruby 1.9.2 might need this
+    cd "$tmp" && make install
+    ) 2>&1 )
+    result=$?
+    echo $install_log > "$rbvm_path/log/rbvm_install.log"
+    if [[ $result != 0 ]]; then
+      echo
+      echo $install_log
+      exit $result
+    fi
+    echo "Internal ruby install complete."
+  fi
+  rbvm_ruby="$rbvm_path/internal_ruby/bin/ruby"
+  rbvm_irb="$rbvm_path/internal_ruby/bin/irb"
+fi
+cp -f "$rbvm_source_path/scripts/rbvm.rb" "$rbvm_path/scripts/"
+
+rbvm_rbvmrb=`echo -n "$rbvm_path/scripts/rbvm.rb" | sed 's#/#\\\\/#g'`
+rbvm_path_tmp=`echo -n "$rbvm_path" | sed 's#/#\\\\/#g'`
+rbvm_ruby=`echo -n "$rbvm_ruby" | sed 's#/#\\\\/#g'`
+rbvm_irb=`echo -n "$rbvm_irb" | sed 's#/#\\\\/#g'`
+
+for file in "rbvm_init.sh" "rbvm_init.csh" "rbvm.csh"; do
+  #rm -f "$rbvm_path/scripts/$file"
+  sed -e "s/<%rbvm_rbvmrb%>/$rbvm_rbvmrb/g" \
+    -e "s/<%rbvm_ruby%>/$rbvm_ruby/g" \
+    -e "s/<%rbvm_irb%>/$rbvm_irb/g" \
+    -e "s/<%rbvm_path%>/$rbvm_path_tmp/g" \
+    "$rbvm_source_path/scripts/$file" > "$rbvm_path/scripts/$file"
+done
+
+#setup_configuration_files
+pushd "$rbvm_path" >/dev/null
+
+if [[ ! -s user/db.yml ]]
+then
+  echo '# User settings, overrides db settings and persists across installs.' \
+    >> user/db.yml
+fi
+if [[ ! -s user/alias.yml ]]
+then
+  echo '# User aliases, overrides rbvm aliases and persists across installs.' \
+    >> user/alias.yml
+fi
+
+if [[ -s config/rbvmrcs ]]
+then
+  mv config/rbvmrcs user/rbvmrcs
+else
+  if [[ ! -f user/rbvmrcs ]]
+  then
+    touch user/rbvmrcs
+  fi
+fi
+
+popd >/dev/null
