@@ -35,24 +35,138 @@ class Rbvm
   attr_accessor :env_output
 
   # if set_env is false, no environment variables are sent back to the shell to be set.
-  def initialize(input_str = nil, existing = nil)
-    if input_str #&& get_alias(input_str) != 'default'
-      parse_ruby_string(input_str, existing)
-      @system_ruby = false
-    elsif get_alias('default')
-      parse_ruby_string get_alias('default')
-      @system_ruby = false
-    elsif existing
-      # find latest installed ruby
-    else
+  def initialize(str = nil, existing = nil)
+
+    @system_ruby = false
+    self.env_output = {}
+    str = get_alias(str)
+
+    case str
+    when 'system'
       @system_ruby = true
+      return
+
+    when '', nil
+      if existing
+        # find version from existing rubies
+        Dir.chdir(File.join(env.rbvm_path, 'rubies')) do
+          str = Dir["#{config_db("interpreter")}*"][-1]
+        end
+      else
+        @interpreter = config_db("interpreter")
+        @version = config_db(interpreter, "version")
+      end
+
     end
 
-    self.env_output = {}
+    if !system_ruby && str
+      @interpreter, @version, temp_patchlevel, temp_gemset = parse_ruby_string(str)
+
+      if interpreter && version.nil?
+        if existing
+          @version = parse_ruby_string(get_existing_ruby(str))[1]
+        else
+          @version = config_db(interpreter, "version")
+        end
+      elsif interpreter.nil? && version
+        case version
+        when /^1\.(8\.[6-7]|9\.[1-3])$/
+          @interpreter = "ruby"
+        when /^1\.[3-6].*$/
+          @interpreter = "jruby"
+        when /^1\.[0-2]\.\d$/
+          @interpreter = "rbx"
+        when /^\d*$/
+          @interpreter = "maglev"
+        when /^0\.8|nightly$/
+          @interpreter = "macruby"
+        end
+      elsif interpreter.nil? && version.nil?
+        log("Ruby string not understood: #{str}", "debug")
+      end
+
+      if !interpreters.include?(interpreter)
+        log("Invalid ruby interpreter: #{interpreter}", "debug")
+      end
+
+      #patchlevel
+      if !temp_patchlevel.blank?
+        @patchlevel = temp_patchlevel
+      else
+        if existing
+          @patchlevel = parse_ruby_string(get_existing_ruby(str))[2]
+        else
+          @patchlevel = config_db(interpreter, version, "patchlevel")
+        end
+      end
+
+      #gemset
+      if !temp_gemset.blank?
+        @gemset = temp_gemset
+      end
+
+      if !valid?
+        @interpreter = @version = @patchlevel = @gemset = nil
+        @ruby_string = str
+        log("Invalid ruby specificiation: #{str}", "debug")
+        return
+      elsif existing && !installed?
+        @interpreter = @version = @patchlevel = @gemset = nil
+        @ruby_string = str
+        log("No installed ruby with specificiation: #{str}", "debug")
+        return
+      end
+
+      # TODO use existing to pick suitable ruby if specified
+
+      @ruby_string = "#{interpreter}"
+      @ruby_string += "-#{version}" if version
+      if patchlevel
+        if interpreter == "ruby"
+          @patchlevel.delete!('p')
+          @ruby_string += "-p#{patchlevel}"
+        else
+          @ruby_string += "-#{patchlevel}"
+        end
+      end
+
+      @ruby_home = File.join(env.path, "rubies", ruby_string)
+      @gem_base = File.join(env.gems_path, ruby_string)
+      if gemset
+        @gem_home = "#{gem_base}#{env.gemset_separator}#{gemset}"
+      else
+        @gem_home = gem_base
+      end
+      @global_gem_home = "#{gem_base}#{env.gemset_separator}global"
+      @gem_path = "#{gem_home}:#{global_gem_home}"
+    end
+
+    # TODO why aren't some interpreters in config/known?
+    if !known?
+      log("Unknown ruby specification: #{str} -> #{ruby_string}. Proceeding...", "debug")
+    end
+  end
+
+  def get_existing_ruby(str)
+    Dir.chdir(File.join(env.rbvm_path, 'rubies')) do
+      return Dir["#{str}*"][-1]
+    end
+  end
+
+  def parse_ruby_string(str)
+    if str =~ /^(#{interpreters.join('|')})?-?(.*?)(?:-(.*?))?(?:#{env.gemset_separator}(.*))?$/
+      interpreter = $1 if !$1.blank?
+      version = $2 if !$2.blank?
+      patchlevel = $3 if !$3.blank?
+      gemset = $4 if !$4.blank?
+    end
+
+    return [interpreter, version, patchlevel, gemset]
   end
 
   # parse string into [interpreter, version, (patchlevel)].
   # Use config/user and config/db to get defaults if unspecified.
+=begin
   def parse_ruby_string(str, existing)
     raise if ruby_string
 
@@ -147,7 +261,7 @@ class Rbvm
 
     return
   end
-
+=end
   def interpreters
     return [
       "ruby",
@@ -553,6 +667,10 @@ class Rbvm
   def rename_gemset(rbvm_dest)
     if gemset_exists?
       rbvm_dest = Rbvm.new(rbvm_dest) if String === rbvm_dest
+      if rbvm_dest.gemset.blank?
+        log("Destination gemset not specified: #{rbvm_dest.ruby_string_with_gemset}", "error")
+        raise "Gemset not renamed!"
+      end
       if rbvm_dest.ruby_string == ruby_string
         log("Renaming gemset: #{ruby_string_with_gemset} to #{rbvm_dest.ruby_string_with_gemset}", "info")
         File.rename(gem_home, rbvm_dest.gem_home)
@@ -570,6 +688,10 @@ class Rbvm
   def copy_gemset(rbvm_dest)
     if installed_and_working?
       rbvm_dest = Rbvm.new(rbvm_dest) if String === rbvm_dest
+      if !rbvm_dest.gemset
+        log("Destination gemset not specified: #{rbvm_dest.ruby_string_with_gemset}", "error")
+        raise "Gemset not copied!"
+      end
       if !rbvm_dest.ruby_string == ruby_string
         log("The new gemset has a different ruby interpreter, version, or patchlevel: #{ruby_string} differs from #{rbvm_dest.ruby_string}. Some of the gems might not work.", "warn")
       end
@@ -1256,8 +1378,13 @@ class Rbvm
     end #read_db
 
     def config_db(*args)
-      @user_db ||= YAML.load_file(File.join(self.env.path, 'user', 'db.yml'))
-      @config_db ||= YAML.load_file(File.join(self.env.path, 'config', 'db.yml'))
+      if !@config_db
+        @config_db = {}
+        %w(config user).each do |dir|
+          file = File.join(self.env.path, dir, 'db.yml')
+          @config_db.merge!(YAML.load_file(file)) if File.exists?(file)
+        end
+      end
 
       setting = args.pop
       values = []
@@ -1547,6 +1674,14 @@ class Rbvm
       args = [] if args.nil? || args.empty?
       return args
     end
+
+    #def current_rbvm
+      #if ENV['rbvm_ruby_specification']
+        #new(ENV['rbvm_ruby_specification'])
+      #else
+        #raise
+      #end
+    #end
     
     def get_rbvm(arg = nil, existing = nil)
       if arg.nil?
@@ -1686,32 +1821,40 @@ class Rbvm
       end
     end
 
-    def gemset_copy(old, new=nil)
-      if old.nil? && new.nil?
+    def gemset_copy(new, old=nil)
+      if old.nil?
+        if ENV['rbvm_ruby_specification'].blank?
+          log("No current rbvm_ruby_specification: #{ARGV.join(' ')}", "error")
+          raise
+        else
+          old = ENV['rbvm_ruby_specification']
+        end
+      end
+      if new.nil?
         log("No target name supplied: #{ARGV.join(' ')}", "error")
         raise
-      elsif new
+      else
         rbvm_src = get_rbvm(old, true)
         rbvm_dest = get_rbvm(new)
-        rbvm_src.copy_gemset(rbvm_dest)
-      else
-        rbvm_src = get_rbvm
-        rbvm_dest = get_rbvm old
         rbvm_src.copy_gemset(rbvm_dest)
       end
     end
 
-    def gemset_rename(old, new=nil)
-      if old.nil? && new.nil?
+    def gemset_rename(new, old=nil)
+      if old.nil?
+        if ENV['rbvm_ruby_specification'].blank?
+          log("No current rbvm_ruby_specification: #{ARGV.join(' ')}", "error")
+          raise
+        else
+          old = ENV['rbvm_ruby_specification']
+        end
+      end
+      if new.nil?
         log("No target name supplied: #{ARGV.join(' ')}", "error")
         raise
-      elsif new
+      else old
         rbvm_src = get_rbvm(old, true)
         rbvm_dest = get_rbvm new
-        rbvm_src.rename_gemset(rbvm_dest)
-      else
-        rbvm_src = get_rbvm
-        rbvm_dest = get_rbvm old
         rbvm_src.rename_gemset(rbvm_dest)
       end
       rbvm_dest.use if rbvm_src.ruby_string_with_gemset == ENV['rbvm_ruby_specification']

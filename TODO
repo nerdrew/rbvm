@@ -36,3 +36,5 @@ Copy gems from one ruby to another / copy gemsets.
 on startup auto select default ruby if one exists.
 
 ensure no extra arguments are ignored
+
+add current_rbvm method instead of using get_rbvm?

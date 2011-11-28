@@ -24,7 +24,7 @@ $LOAD_PATH.unshift '/Users/andrew/dev/fakefs/lib'
 require 'fakefs/safe'
 
 $LOAD_PATH.unshift(File.dirname(__FILE__))
-$LOAD_PATH.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
+$LOAD_PATH.unshift(File.join(File.dirname(__FILE__), '..', 'scripts'))
 require 'rbvm'
 
 # Silence log
@@ -52,12 +52,12 @@ class MiniTest::Unit::TestCase
   attr_accessor :rbvm
 
   def setup
-    %w(db.yaml alias md5 known).each do |file|
+    %w(db.yml alias md5 known).each do |file|
       FakeFS::FileSystem.clone(File.join TEST_DIR, 'config', file)
     end
     FakeFS::FileSystem.clone(File.join TEST_DIR, 'gemsets', 'default.gems')
 
-    %w(archives bin config contrib environments examples gems help internal_ruby log man patches rubies lib src tmp user wrappers).each do |dir|
+    %w(archives bin config contrib environments examples gems help internal_ruby lib log man patches rubies scripts src tmp user wrappers).each do |dir|
       FileUtils.mkdir_p File.join(TEST_DIR, dir)
     end
 
