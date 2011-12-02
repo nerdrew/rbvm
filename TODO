@@ -2,9 +2,6 @@ Add readline to irb install
 Look at curl / tar mocks.
   Maybe with command aliases?
   Curb gem? Still need curl installed, another dependency.
-Better mock tests for speed. Maybe break out the slow tests again.
-run: a series of methods returning true or false, false breaks? No.
-use env[:rvm_gems_path] everywhere; similar with other paths
 
 environments - are environment files necessary?
   IRBRC
@@ -38,3 +35,5 @@ on startup auto select default ruby if one exists.
 ensure no extra arguments are ignored
 
 add current_rbvm method instead of using get_rbvm?
+
+Add tests for command line arguments, etc.

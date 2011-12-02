@@ -49,26 +49,18 @@ class Rbvm
     when '', nil
       if existing
         # find version from existing rubies
-        Dir.chdir(File.join(env.rbvm_path, 'rubies')) do
-          str = Dir["#{config_db("interpreter")}*"][-1]
-        end
+        @interpreter, @version, @patchlevel, @gemset =
+          parse_ruby_string(get_existing_ruby(config_db("interpreter")))
       else
         @interpreter = config_db("interpreter")
         @version = config_db(interpreter, "version")
+        @patchlevel = config_db(interpreter, version, "patchlevel")
       end
 
-    end
+    else
+      @interpreter, @version, @patchlevel, @gemset = parse_ruby_string(str)
 
-    if !system_ruby && str
-      @interpreter, @version, temp_patchlevel, temp_gemset = parse_ruby_string(str)
-
-      if interpreter && version.nil?
-        if existing
-          @version = parse_ruby_string(get_existing_ruby(str))[1]
-        else
-          @version = config_db(interpreter, "version")
-        end
-      elsif interpreter.nil? && version
+      if interpreter.nil? && version
         case version
         when /^1\.(8\.[6-7]|9\.[1-3])$/
           @interpreter = "ruby"
@@ -89,146 +81,14 @@ class Rbvm
         log("Invalid ruby interpreter: #{interpreter}", "debug")
       end
 
-      #patchlevel
-      if !temp_patchlevel.blank?
-        @patchlevel = temp_patchlevel
+      if existing
+        i, v, p, g = parse_ruby_string(get_existing_ruby(str))
+        @version ||= v
+        @patchlevel ||= p
       else
-        if existing
-          @patchlevel = parse_ruby_string(get_existing_ruby(str))[2]
-        else
-          @patchlevel = config_db(interpreter, version, "patchlevel")
-        end
+        @version ||= config_db(interpreter, "version")
+        @patchlevel ||= config_db(interpreter, version, "patchlevel")
       end
-
-      #gemset
-      if !temp_gemset.blank?
-        @gemset = temp_gemset
-      end
-
-      if !valid?
-        @interpreter = @version = @patchlevel = @gemset = nil
-        @ruby_string = str
-        log("Invalid ruby specificiation: #{str}", "debug")
-        return
-      elsif existing && !installed?
-        @interpreter = @version = @patchlevel = @gemset = nil
-        @ruby_string = str
-        log("No installed ruby with specificiation: #{str}", "debug")
-        return
-      end
-
-      # TODO use existing to pick suitable ruby if specified
-
-      @ruby_string = "#{interpreter}"
-      @ruby_string += "-#{version}" if version
-      if patchlevel
-        if interpreter == "ruby"
-          @patchlevel.delete!('p')
-          @ruby_string += "-p#{patchlevel}"
-        else
-          @ruby_string += "-#{patchlevel}"
-        end
-      end
-
-      @ruby_home = File.join(env.path, "rubies", ruby_string)
-      @gem_base = File.join(env.gems_path, ruby_string)
-      if gemset
-        @gem_home = "#{gem_base}#{env.gemset_separator}#{gemset}"
-      else
-        @gem_home = gem_base
-      end
-      @global_gem_home = "#{gem_base}#{env.gemset_separator}global"
-      @gem_path = "#{gem_home}:#{global_gem_home}"
-    end
-
-    # TODO why aren't some interpreters in config/known?
-    if !known?
-      log("Unknown ruby specification: #{str} -> #{ruby_string}. Proceeding...", "debug")
-    end
-  end
-
-  def get_existing_ruby(str)
-    Dir.chdir(File.join(env.rbvm_path, 'rubies')) do
-      return Dir["#{str}*"][-1]
-    end
-  end
-
-  def parse_ruby_string(str)
-    if str =~ /^(#{interpreters.join('|')})?-?(.*?)(?:-(.*?))?(?:#{env.gemset_separator}(.*))?$/
-      interpreter = $1 if !$1.blank?
-      version = $2 if !$2.blank?
-      patchlevel = $3 if !$3.blank?
-      gemset = $4 if !$4.blank?
-    end
-
-    return [interpreter, version, patchlevel, gemset]
-  end
-
-  # parse string into [interpreter, version, (patchlevel)].
-  # Use config/user and config/db to get defaults if unspecified.
-=begin
-  def parse_ruby_string(str, existing)
-    raise if ruby_string
-
-    if str.empty?
-      @interpreter = config_db("interpreter")
-      @version = config_db(interpreter, "version")
-    elsif str =~ /latest_(ruby|rbx|jruby|macruby)/
-      @interpreter = config_db($1)
-      @version = config_db(interpreter, "version")
-    else
-      get_alias(str) =~ /^(#{interpreters.join('|')})?-?(.*?)(?:-(.*?))?(?:#{env.gemset_separator}(.*))?$/
-
-      #interpreter is specified
-      @interpreter = $1 if !$1.blank?
-      
-      #version is specified
-      @version = $2 if !$2.blank?
-
-      temp_patchlevel = $3
-      temp_gemset = $4
-
-      if interpreter && version.nil?
-        @version = config_db(interpreter, "version")
-      elsif interpreter.nil? && version
-        case version
-        when /^1\.(8\.[6-7]|9\.[1-3])$/
-          @interpreter = "ruby"
-        when /^1\.[3-6].*$/
-          @interpreter = "jruby"
-        when /^1\.[0-2]\.\d$/
-          @interpreter = "rbx"
-        when /^\d*$/
-          @interpreter = "maglev"
-        when /^0\.8|nightly$/
-          @interpreter = "macruby"
-        end
-      elsif interpreter.nil? && version.nil?
-        log("Ruby string not understood: #{str}", "debug")
-      end
-
-      if !interpreters.include?(interpreter)
-        log("Invalid ruby interpreter: #{interpreter}", "debug")
-      end
-    end
-
-    #patchlevel
-    if !temp_patchlevel.blank?
-      @patchlevel = temp_patchlevel
-    else
-      @patchlevel = config_db(interpreter, version, "patchlevel")
-    end
-
-    #gemset
-    if !temp_gemset.blank?
-      @gemset = temp_gemset
-    end
-
-    if !valid?
-      @interpreter = @version = @patchlevel = @gemset = nil
-      @ruby_string = str
-      log("Invalid ruby specificiation: #{str}", "debug")
-      return
     end
 
     # TODO use existing to pick suitable ruby if specified
@@ -258,10 +118,44 @@ class Rbvm
     if !known?
       log("Unknown ruby specification: #{str} -> #{ruby_string}. Proceeding...", "debug")
     end
-
-    return
+    if !valid?
+      reset
+      @ruby_string = str
+      log("Invalid ruby specificiation: #{str}", "debug")
+      return
+    elsif existing && !installed?
+      reset
+      @ruby_string = str
+      log("No installed ruby with specificiation: #{str}", "debug")
+      return
+    end
   end
-=end
+
+  def reset
+    @ruby_string = @interpreter = @version = @patchlevel = @gemset = nil
+    @ruby_home = @gem_home = @global_gem_home = @gem_base = @gem_path = @path = nil
+    @system_ruby = false
+    self.env_output = {}
+  end
+
+  def get_existing_ruby(str)
+    Dir.chdir(File.join(env.path, 'rubies')) do
+      return Dir["#{str}*"][-1]
+    end
+  end
+
+  # parse string into [interpreter, version, (patchlevel, (gemset))].
+  def parse_ruby_string(str)
+    if str =~ /^(#{interpreters.join('|')})?-?(.*?)(?:-(.*?))?(?:#{env.gemset_separator}(.*))?$/
+      interpreter = $1 if !$1.blank?
+      version = $2 if !$2.blank?
+      patchlevel = $3 if !$3.blank?
+      gemset = $4 if !$4.blank?
+    end
+
+    return [interpreter, version, patchlevel, gemset]
+  end
+
   def interpreters
     return [
       "ruby",
@@ -1382,7 +1276,8 @@ class Rbvm
         @config_db = {}
         %w(config user).each do |dir|
           file = File.join(self.env.path, dir, 'db.yml')
-          @config_db.merge!(YAML.load_file(file)) if File.exists?(file)
+          yaml = YAML.load_file(file) if File.exists?(file)
+          @config_db.merge!(yaml) if yaml
         end
       end
 
@@ -1420,7 +1315,7 @@ class Rbvm
     end
 
     def remove_rbvm
-      FileUtils.rm_rf(env.rbvm_path)
+      FileUtils.rm_rf(env.path)
       $shellout.puts "rbvm was fully removed. Note you may need to manually remove /etc/rbvmrc and ~/.rbvmrc if they exist still."
     end
 
@@ -1666,13 +1561,13 @@ class Rbvm
     end
 
     def parse_version_argument(args)
-      if String === args
-        args = args.split(",")
+      if args.nil? || args.empty?
+        []
+      elsif String === args
+        args.split(",")
       else args.size == 1
         args = args[0].split(',')
       end
-      args = [] if args.nil? || args.empty?
-      return args
     end
 
     #def current_rbvm
@@ -1772,7 +1667,7 @@ class Rbvm
     end
 
     def list(args)
-      if args[0] =~ /gemsets?/
+      if args[0] =~ /gemset(s?)/
         versions = parse_version_argument(args[1])
         $shellout.puts "\nrbvm gemsets\n\n"
         list_rubies(installed_ruby_gemsets(versions.empty? ? nil : Rbvm.new(versions[0]).ruby_string), get_rbvm(nil, true).gem_home)

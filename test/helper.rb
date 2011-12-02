@@ -65,11 +65,12 @@ class MiniTest::Unit::TestCase
       FileUtils.touch File.join(TEST_DIR, 'archives', file)
     end
 
-    %w(jruby-1.6.0 rbx-1.2.2-20110222 rbx-1.2.4-20110705 ruby-1.8.7-p330 ruby-1.9.2-p136 ruby-1.9.2-p290 rubygems-1.8.10).each do |dir|
+    %w(jruby-1.6.0 rbx-1.2.2-20110222 rbx-1.2.4-20110705 ruby-1.8.7-p330 ruby-1.9.2-p136 ruby-1.9.2-p290).each do |dir|
       FileUtils.mkdir_p File.join(TEST_DIR, 'src', dir)
       FileUtils.mkdir_p File.join(TEST_DIR, 'rubies', dir)
       FileUtils.mkdir_p File.join(TEST_DIR, 'gems', dir)
-    end
+    end 
+    FileUtils.mkdir_p File.join(TEST_DIR, 'src', 'rubygems-1.8.10')
 
     %w(LICENCE VERSION).each do |file|
       FileUtils.touch File.join(TEST_DIR, file)

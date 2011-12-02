@@ -20,6 +20,8 @@ class TestRbvm < MiniTest::Unit::TestCase
     assert_equal "ruby-1.9.2-p136", rbvm.ruby_string
     assert_equal "ruby-1.9.2-p136@gemset", rbvm.ruby_string_with_gemset
     # TODO tests for existing rubies
+    assert_equal "ruby-1.9.2-p290", Rbvm.new("ruby", true).ruby_string
+    assert_equal "ruby-1.9.2-p290", Rbvm.new(nil, true).ruby_string
   end
 
   def test_ruby_configure_option
